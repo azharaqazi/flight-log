@@ -521,6 +521,7 @@ try{ const c=JSON.parse(lsGet(LS)||"null"); if(c&&c.items) P=Object.assign(blank
 try{ const u=JSON.parse(lsGet(LS+"-ui")||"null"); if(u){ tab=u.tab||"home"; scope=u.scope||"all"; roleF=u.roleF||""; } }catch(e){}
 
 // ---------------- helpers
+const _rc=Element.prototype.replaceChildren; Element.prototype.replaceChildren=function(...k){ return _rc.apply(this,k.filter(x=>x!=null&&x!==false)); };
 function el(tag,attrs,...kids){
   const n=document.createElement(tag);
   if(attrs) for(const k in attrs){ const v=attrs[k]; if(v==null||v===false) continue;
@@ -1154,7 +1155,7 @@ let renderQ=null; function soon(){ clearTimeout(renderQ); renderQ=setTimeout(ren
 async function start(){
   gate("Loading your flight log…",false);
   let j;
-  try{ j=await api("bootstrap"); }
+  try{ j=await api("bootstrap"); if(!j||!j.me){ await new Promise(r=>setTimeout(r,1500)); j=await api("bootstrap"); } if(!j||!j.me) throw Object.assign(new Error("bad"),{code:"bad_response"}); }
   catch(e){
     if(e.code==="not_allowed"){ gate("Your Google account "+(e.email||"")+" isn't on this batch's list yet. Ask the admin to add it, then reload.",false); $("gate-out").hidden=false; return; }
     if(e.code==="network"){ gate("Couldn't reach the server. Check your connection and reload.",false); return; }
