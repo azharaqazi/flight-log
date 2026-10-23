@@ -122,6 +122,26 @@ textarea.field{width:100%;resize:vertical}
 .newbanner .btn{background:#fff;color:#0f2a40;border-color:#fff}
 
 /* chips */
+.trk{border:1px solid currentColor;background:transparent}
+.trk.t-main{color:var(--amber)} .trk.t-rev{color:#4a8fd6} .trk.t-tech{color:var(--good)}
+.bat{background:var(--panel-2);color:var(--muted);border:1px solid var(--line)}
+.s-sub{color:var(--muted);font-size:12.5px;margin-top:4px}
+.s-tools{display:flex;gap:6px;align-items:center;flex-wrap:wrap}
+.tracks{display:grid;gap:10px}
+.trow{display:grid;grid-template-columns:120px 1fr auto;gap:10px;align-items:center;font-size:13.5px;width:100%;background:none;border:0;padding:4px 0;color:inherit;cursor:pointer;font:inherit}
+.trow .chip{justify-self:start}
+.trow:hover .tbar{outline:1px solid var(--line)}
+.tbar{height:8px;border-radius:99px;background:var(--panel-2);overflow:hidden}
+.tbar i{display:block;height:100%;border-radius:99px}
+.tbar.t-main i{background:var(--amber)} .tbar.t-rev i{background:#4a8fd6} .tbar.t-tech i{background:var(--good)}
+.sci-card blockquote{margin:6px 0 8px;font-size:18px;line-height:1.35;font-weight:600}
+.sci-grid{display:grid;gap:18px}
+.sci-grid section h3{margin:0 0 8px}
+.sci-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:10px}
+.sci{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:12px 14px}
+.sci p{margin:0 0 6px;font-weight:600;line-height:1.4}
+.sci small{color:var(--muted);font-family:var(--f-mono);font-size:11px;letter-spacing:.04em}
+.libmode{margin-bottom:12px}
 .tabcount{display:inline-block;margin-left:6px;min-width:20px;padding:1px 6px;border-radius:99px;background:var(--amber);color:#111;font-family:var(--f-mono);font-size:11px;font-weight:600;vertical-align:middle;line-height:16px;text-align:center}
 .qa-wrap{display:grid;gap:12px}
 .qa-ask textarea{margin:8px 0}
@@ -401,6 +421,8 @@ a.btn{text-decoration:none;color:inherit;display:inline-block}
     <div class="home">
       <div class="card"><h3>Due now</h3><div id="duelist"></div></div>
       <div style="display:grid;gap:14px;align-content:start">
+        <div class="card" id="tracks"></div>
+        <div class="card sci-card" id="sciday"></div>
         <div class="card tip" id="tipday"></div>
         <div class="card"><h3>Batch radar</h3><div id="radar"></div></div>
       </div>
@@ -414,6 +436,8 @@ a.btn{text-decoration:none;color:inherit;display:inline-block}
       </div>
       <select class="field" id="f-role" aria-label="Filter by role"><option value="">Everyone's actions</option></select>
       <input class="field" id="f-q" placeholder="Search actions" aria-label="Search actions" style="flex:1 1 160px">
+      <div class="seg" id="f-track"><button data-v="all">All</button><button data-v="main">RJ Sir</button><button data-v="rev">Revision</button><button data-v="tech">Tech</button></div>
+      <select class="field" id="f-group" aria-label="Group actions"><option value="class">Group by class</option><option value="batch">Group by batch</option><option value="role">Group by lead role</option></select>
       <button class="btn small" id="f-order" title="Rahul Sir: start from the latest week">Newest class first</button>
       <button class="btn small" id="expandall">Expand all</button>
     </div>
@@ -430,6 +454,8 @@ a.btn{text-decoration:none;color:inherit;display:inline-block}
     <div class="habits" id="habits"></div>
     <div class="eyebrow" style="margin-top:20px">Last 12 weeks · amber = 70%+ of rituals kept</div>
     <div class="streak" id="streakbar"></div>
+    <div class="week-nav" style="margin-top:26px"><strong id="mo-label"></strong><span class="eyebrow" id="mo-score"></span></div>
+    <div class="habits" id="monthly"></div>
   </section>
 
   <section id="p-board" class="deck" hidden>
@@ -447,7 +473,9 @@ a.btn{text-decoration:none;color:inherit;display:inline-block}
   </section>
 
   <section id="p-lib" class="deck" hidden>
-    <div class="lib">
+    <div class="seg libmode" id="lib-mode"><button data-v="topics">Topics</button><button data-v="sci">Sciences</button></div>
+    <div id="sci" hidden></div>
+    <div class="lib" id="libtopics">
       <div>
         <input class="field" id="lib-q" placeholder="Search topics: EM, 4AS, TAM…" aria-label="Search topics" style="width:100%;margin-bottom:8px">
         <div class="tlist" id="tlist"></div>
@@ -546,6 +574,74 @@ const BADGES = [
   {id:"streak",name:"4-week streak",streak:4},
   {id:"books",name:"Bookworm",books:5}
 ];
+const TRACKS = {
+  main:{label:"RJ Sir",w:1,hint:"Main class: the official assignments"},
+  rev:{label:"Revision",w:0.7,hint:"Revision class: deepens the main class, counts at 70%"},
+  tech:{label:"Tech",w:1,hint:"Tech workshop: building the tools, full weight"}
+};
+function trackOf(s){ if(!s) return "main"; if(TRACKS[s.kind]) return s.kind; const t=String(s.tag||""); if(/tech/i.test(t)) return "tech"; if(/^\s*rev/i.test(t)) return "rev"; return "main"; }
+function actTrack(a){ return trackOf(sessions[a.s]); }
+function actWeight(a){ return TRACKS[actTrack(a)].w; }
+function trackChip(tr){ return el("span",{class:"chip trk t-"+tr,title:TRACKS[tr].hint,text:TRACKS[tr].label+(TRACKS[tr].w<1?" · "+Math.round(TRACKS[tr].w*100)+"%":"")}); }
+function buildsOn(s){ if(trackOf(s)==="main") return null; const prev=sessionList().filter(x=>trackOf(x)==="main"&&(x.order??0)<(s.order??0)); const m=prev[prev.length-1]; return m?(m.tag||m.name):null; }
+const BATCHES = {
+  people:{label:"People & Hiring",hint:"Hiring, roles, the org chart, training the team"},
+  sales:{label:"Sales & Customers",hint:"Client database, follow-ups, pitch, key customers"},
+  money:{label:"Money & GP",hint:"GP Sheet, accounts, budgets, cash, payments, stock value"},
+  systems:{label:"Systems & Process",hint:"Flowcharts, FMS, IMS, checklists, S30, data"},
+  time:{label:"Owner time",hint:"Scheduling, 4 AM, meetings, Monday File, delegation, out of office"},
+  mindset:{label:"Mindset",hint:"RA Magic, manifestation, gratitude, family"},
+  learning:{label:"Learning",hint:"Books, films, testimonials, peer visits"}
+};
+const BATCH_RULES = [
+  ["mindset",/manifest|gratitude|affirmation|vision board|business vision|r-?a magic|bless|visuali[sz]|belief|complain|desire map|thank|listening at home|family|spouse|parents|hug your father|non-money|appreciation|\bmani\b|five goals|health|ask for help/i],
+  ["learning",/^(read|watch)\b|\bbook\b|film|testimonial|playlist|tech class|senior batch|giant/i],
+  ["money",/accounts checklist|capex|daily accounts/i],
+  ["time",/approval limits|repeated interruptions/i],
+  ["systems",/\bfms\b|flowchart|\bims\b|checklist|\bgrn\b|\bwip\b|bottleneck|purchase fms|purchase trigger|purchase dashboard|purchase process|purchase and order|master process|fcd map|carma|\bsku/i],
+  ["people",/\bhire\b|hired|recruit|register the implementer|org(ani[sz]ation)? chart|\btam\b|team alignment|appoint|problem solver|train the pc|pc training|name the roles|dedicated mis|divide departments|move managers|implementer rhythm/i],
+  ["money",/\bgp\b|gross profit|profit|budget|cost sheet|costs\b|\b4as\b|four account|accounts|fifo|payment|cash|debt|loan|\bfss\b|financial|withdraw|pric|cogs|collection|wealth|net worth|personal finance|break-even|fixed vs variable|receivable|payable|return on capital|dead stock/i],
+  ["sales",/sales|customer|client|quotation|quote|lead|pitch|enquir|sorry|connect call|rocket|referral|market share|meca|on-time delivery|reference engine/i],
+  ["time",/4 ?am|8 am|calendar|schedul|thursday|wednesday|monday file|executive meeting|\bem\b|\booo\b|out of office|interruption|delegat|\bdcp\b|board meeting|weekday|plan (the )?(month|year|november|december)|create the month|print the action|approval limits|quadrant|time audit|time sheet|quick capture|onenote|email|think on paper|conference room|phone discipline|mvot|operational meeting|call forwarding/i]
+];
+function batchOf(a){ if(BATCHES[a.batch]) return a.batch; const t=(a.t||"")+" "; for(const [k,re] of BATCH_RULES) if(re.test(t)) return k; return "systems"; }
+const MONTHLY = [
+  {id:"mplan",t:"Next month planned",n:"by the 28th/29th, with the EA"},{id:"mra",t:"Next month's RA Magic page",n:"last Saturday"},
+  {id:"mboard",t:"Partners' board meeting",n:"start or end of month"},{id:"mpack",t:"Profit pack + FSS",n:"by the first Saturday"},
+  {id:"mwd",t:"Withdrawable profit calculated",n:"monthly"},{id:"mbud",t:"Budget vs actual reviewed",n:"sales and every expense"},
+  {id:"mgp",t:"GP Sheet refreshed",n:"products and clients"},{id:"mstock",t:"External physical stock check",n:"monthly, first 3 months"},
+  {id:"myoy",t:"Compared with last year",n:"revenue and profit"}
+];
+const SCIENCES = [
+  ["time",1,"Multitasking is the worst destroyer of time. Batch similar work."],["time",1,"Don't start any work without scheduling it."],
+  ["time",2,"Think On Paper: off the phone, out of the office."],["time",3,"MVOT: know the money value of your time before you spend it."],
+  ["time",3,"Check mail and WhatsApp twice a day: 1 PM and 6 PM."],["time",3,"Use the flight as a taxi: owner time costs more than the fare."],
+  ["time",4,"The power of No: yes to something is no to something else."],["time",4,"Take every meeting in the conference room, not your cabin."],
+  ["time",4,"No phone after 8 PM; pick it up after breakfast."],["time",6,"Covey's four quadrants: live in Important, not Urgent."],
+  ["time",10,"Schedule tomorrow's 4 AM by 9 PM tonight."],["time",12,"Profit grows out of office. You can't grow it sitting inside."],
+  ["systems",1,"SSG: start with a rough first version and improve through use."],["systems",1,"System implementation happens with love and a smile."],
+  ["systems",5,"Science of creation: Create, Align, Roll out."],["systems",6,"Whatever you measure grows."],
+  ["systems",10,"CARMA: Create, Align, Roll out, Measure, Accountability."],["systems",11,"A senior, technical or intelligent person can't be your follower. Follow-up is its own job."],
+  ["systems",11,"Give every process a Problem Solver, or you become the Problem Solver."],["systems",11,"Managers solve problems and decide; they don't chase follow-ups."],
+  ["systems",12,"Delayed data is corrupted data."],["systems",12,"Doer or data entry operator fills the FMS; the PC monitors."],
+  ["systems",13,"80% is the new 100%. Switch it on, then improve."],["systems",13,"A bottleneck limits the whole flow. Improving anything else just builds piles."],
+  ["systems",14,"FMS controls movement, IMS controls quantity, checklists control repetition, the PC controls follow-through."],
+  ["systems",14,"Don't automate confusion. Make it clear, prove it works, then digitise."],
+  ["money",3,"Apply 80/20 everywhere: products, clients, vendors, staff, time."],["money",4,"Passive income gives abundance; active income doesn't."],
+  ["money",5,"Debt-free company: stop living on CC, move to planned EMIs."],["money",9,"Ask yourself every day: how much money did I earn today?"],
+  ["money",10,"Invest in learning: up to 5% of profit."],["money",13,"Turnover is vanity; gross profit is reality."],
+  ["money",14,"Cash flow is the oxygen of the business."],["money",14,"Exploit the constraint before you buy capacity. CapEx comes last."],
+  ["sales",1,"Sales grow out of office: two full sales days a week."],["sales",13,"Serve the top 20% like gold. The bottom of the list may be costing you."],
+  ["people",8,"Dedicated resource: one person, one job."],["people",9,"Work on your strengths; hire for your weaknesses (Who, not How)."],
+  ["people",10,"Delegate and Grow: delegation creates leaders."],["people",12,"Train your team the way Rahul Sir trains you."],
+  ["people",12,"Specific appreciation creates ownership."],
+  ["mindset",5,"The biggest stop in life is the start. Socho mat, karo."],["mindset",6,"Clear vision and hyper focus."],
+  ["mindset",7,"Beliefs → thoughts → feelings → frequency → results."],["mindset",7,"As you think, so shall you be."],
+  ["mindset",7,"No-complaints diet. Celebrate small wins daily."],["mindset",7,"Assume the wish fulfilled, then act."],
+  ["mindset",7,"Be a good receiver: accept good things, and bless others."],["mindset",12,"Name your months: Wonderful October, Superb September."],
+  ["mindset",13,"First manifestation: Autopilot. Second: growth in profit."],["mindset",14,"Gratitude makes relationships work."],
+  ["mindset",14,"The bigger the why, the easier the how."]
+].map(([b,wk,t],i)=>({id:"sc"+i,b,wk,t}));
 let START = new Date(2026,6,15), AUTOPILOT = new Date(2027,0,10,23,59), WEEKS = 36;
 const LS = "bmp-flightlog-v2";
 
@@ -553,14 +649,15 @@ const LS = "bmp-flightlog-v2";
 let sessions={}, actions={}, topics={}, resources={}, players=[]; let shelfF="all";
 let P = blankP();
 let db=null, user=null, sample=null, uid=null, isOwner=false, canEdit=false, writable=true, profiles={};
+let groupBy="class", trackF="all", libMode="topics";
 let planOrder="new", qa=[], qaF="all", qaQ="", qaFocus=null, qaDraft={};
 let tab="home", scope="all", roleF="", query="", open=new Set(), weekOffset=0, libSel=null, libQ="";
 const coachOut = {}; let chat=[]; let chatBusy=false;
-function blankP(){ return {items:{},notes:{},habits:{},crew:{},playbook:{},shelf:{},callsign:"",company:"",recent:[],lastSeen:""}; }
+function blankP(){ return {items:{},notes:{},habits:{},monthly:{},crew:{},playbook:{},shelf:{},callsign:"",company:"",recent:[],lastSeen:""}; }
 function lsGet(k){ try{return localStorage.getItem(k);}catch(e){return null;} }
 function lsSet(k,v){ try{localStorage.setItem(k,v);}catch(e){} }
 try{ const c=JSON.parse(lsGet(LS)||"null"); if(c&&c.items) P=Object.assign(blankP(),c); }catch(e){}
-try{ const u=JSON.parse(lsGet(LS+"-ui")||"null"); if(u){ tab=u.tab||"home"; scope=u.scope||"all"; roleF=u.roleF||""; planOrder=u.planOrder||"new"; } }catch(e){}
+try{ const u=JSON.parse(lsGet(LS+"-ui")||"null"); if(u){ tab=u.tab||"home"; scope=u.scope||"all"; roleF=u.roleF||""; planOrder=u.planOrder||"new"; groupBy=u.groupBy||"class"; trackF=u.trackF||"all"; libMode=u.libMode||"topics"; } }catch(e){}
 
 // ---------------- helpers
 const _rc=Element.prototype.replaceChildren; Element.prototype.replaceChildren=function(...k){ return _rc.apply(this,k.filter(x=>x!=null&&x!==false)); };
@@ -620,7 +717,7 @@ function streakOf(h){ let n=0; if(weekPctOf(h,isoWeek(weekDate(0)))>=70) n++; fo
 function scoreFrom(doneArr,halfArr,disc,streak,crewSeated,reads){
   const done=new Set(doneArr||[]), half=new Set(halfArr||[]);
   let earned=0, dn=0, tot=0;
-  actionList().forEach(a=>{ const p=+a.pts||1; tot+=p; if(done.has(a.id)){earned+=p;dn++;} else if(half.has(a.id)) earned+=p/2; });
+  actionList().forEach(a=>{ const p=(+a.pts||1)*actWeight(a); tot+=p; if(done.has(a.id)){earned+=p;dn++;} else if(half.has(a.id)) earned+=p/2; });
   tot=tot||1;
   const impl=Math.round(earned/tot*100), power=Math.round(impl*.8+(disc||0)*.2);
   let li=0; LEVELS.forEach((l,i)=>{ if(power>=l.min) li=i; });
@@ -669,7 +766,7 @@ async function push(){
   try{ await api("save",{state:P,summary}); setSync("Saved"); }
   catch(e){ setSync("Not saved"); if(!isAuthErr(e)) toast("Couldn't save just now. Your change is kept on this device and will retry."); }
 }
-function saveUi(){ lsSet(LS+"-ui",JSON.stringify({tab,scope,roleF,planOrder})); }
+function saveUi(){ lsSet(LS+"-ui",JSON.stringify({tab,scope,roleF,planOrder,groupBy,trackF,libMode})); }
 
 // ---------------- confetti
 const fx=$("fx"), ctx=fx.getContext("2d"); let parts=[], raf=null;
@@ -775,6 +872,7 @@ function renderHome(){
     const core=actionList().filter(a=>a.core&&st(a.id)!==2).slice(0,4);
     dl.replaceChildren(el("p",{class:"lvl-sub",text:"Nothing due this week. Use Thursday Magic on these core moves:"}), ...core.map(a=>dueRow(a,dueInfo(a),n)));
   } else dl.replaceChildren(...list.map(x=>dueRow(x.a,x.d,n)));
+  renderTracks(); renderSciDay();
   const t=tipOfDay(); const td=$("tipday");
   td.replaceChildren(el("div",{class:"eyebrow",text:"Tip of the day"}), el("p",{text:t?t.text:"Tips appear once class notes are loaded."}), t?el("small",{text:"From: "+t.src}):null);
   // radar
@@ -788,6 +886,14 @@ function renderHome(){
     el("div",{class:"eyebrow",style:"margin-top:12px",text:"Recently active"}),
     ...climbers.map(r=>el("div",{class:"due-row"}, el("span",{text:nameOf(r,rows.indexOf(r))+" · "+r.level}), el("span",{class:"pts",text:r.power+" · "+ago(r.updatedAt)}))));
 }
+function renderTracks(){
+  const acts=actionList(); const rows=Object.keys(TRACKS).map(k=>{ const all=acts.filter(a=>actTrack(a)===k); const dn=all.filter(a=>st(a.id)===2).length; return {k,all,dn}; }).filter(r=>r.all.length);
+  $("tracks").replaceChildren(el("h3",{text:"Your three tracks"}), el("div",{class:"tracks"}, ...rows.map(r=>el("button",{class:"trow",style:"text-align:left",title:"Show these in the Flight plan",onclick:()=>{ trackF=r.k; scope="open"; saveUi(); showTab("plan"); }},
+    trackChip(r.k), el("span",{class:"tbar t-"+r.k},el("i",{style:"width:"+Math.round(r.dn/r.all.length*100)+"%"})), el("span",{class:"pts",text:r.dn+"/"+r.all.length})))),
+    el("p",{class:"lvl-sub",style:"margin:8px 0 0;font-size:12.5px",text:"Revision actions count at 70% of their points; RJ Sir and Tech count in full."}));
+}
+function sciOfDay(){ const d=new Date(); const k=Math.floor(dOnly(d)/day); return SCIENCES[((k%SCIENCES.length)+SCIENCES.length)%SCIENCES.length]; }
+function renderSciDay(){ const x=sciOfDay(); $("sciday").replaceChildren(el("div",{class:"eyebrow",text:"Science of the day · "+BATCHES[x.b].label}), el("blockquote",{text:x.t}), el("small",{style:"color:var(--muted)",text:"Week "+x.wk+" · "}), el("button",{class:"link",text:"All sciences",onclick:()=>{ libMode="sci"; saveUi(); showTab("lib"); }})); }
 function dueRow(a,d,n){
   const c=doneBy(a.id).length;
   return el("div",{class:"due-row"},
@@ -807,41 +913,70 @@ function cycle(a,ev){
 }
 
 // ---------------- plan
+function ptsLabel(a){ const p=(+a.pts||1)*actWeight(a); return (Math.round(p*10)/10)+" pt"; }
 function renderPlan(){
   document.querySelectorAll("#f-scope button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===scope)));
-  $("f-role").value=roleF;
+  document.querySelectorAll("#f-track button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===trackF)));
+  $("f-role").value=roleF; $("f-group").value=groupBy;
+  $("f-order").textContent=planOrder==="new"?"Newest class first":"Oldest class first";
   const root=$("plan"), frag=document.createDocumentFragment(), q=query.toLowerCase(), n=playerRows().length;
   const acts=actionList();
-  if(!acts.length){ root.replaceChildren(el("div",{class:"card"}, el("h3",{text:"The flight plan is empty"}), el("p",{text: canEdit ? "Add your first class notes and the action points will appear here, grouped by class." : "The board owner loads action points from class notes. Check back after the next class."}), canEdit?el("button",{class:"btn primary",text:"＋ Add class notes",onclick:openSheet}):null)); return; }
-  const sl=sessionList(), latestId=(sl.filter(x=>acts.some(a=>a.s===x.id)).slice(-1)[0]||{}).id;
-  $("f-order").textContent=planOrder==="new"?"Newest class first":"Oldest class first";
-  (planOrder==="new"?sl.slice().reverse():sl).forEach(s=>{
-    const all=acts.filter(a=>a.s===s.id); if(!all.length) return;
-    const list=all.filter(a=>{ const d=dueInfo(a);
-      return (scope!=="core"||a.core)&&(scope!=="open"||st(a.id)!==2)&&(scope!=="due"||(st(a.id)!==2&&d&&(d.cls==="over"||d.cls==="soon")))&&(!roleF||(a.who||[]).includes(roleF))&&(!q||(a.t+" "+a.d+" "+(a.tip||"")).toLowerCase().includes(q)); });
-    if(!list.length) return;
-    const dn=all.filter(a=>st(a.id)===2).length;
-    const sec=el("section",{class:"session"}, el("div",{class:"s-head"},
-      el("div",null, el("div",{class:"s-meta",text:(s.tag||"")+" · "+(parseDate(s.date)?fmtDate(parseDate(s.date)):"")}), el("h2",null,s.name||"Class",s.id===latestId?el("span",{class:"chip new",style:"margin-left:10px;vertical-align:middle",text:"Latest"}):null)),
-      el("div",null, el("div",{class:"s-prog",text:dn+" / "+all.length+" done"}), el("div",{class:"s-bar"},el("i",{style:"width:"+Math.round(dn/all.length*100)+"%"}))),
-      el("div",{class:"s-theme",text:s.theme||""})));
-    list.forEach(a=>sec.append(renderItem(a,n)));
-    frag.append(sec);
-  });
-  // orphans
-  const orphan=acts.filter(a=>!sessions[a.s]); if(orphan.length){ const sec=el("section",{class:"session"},el("div",{class:"s-head"},el("h2",{text:"Other actions"}))); orphan.forEach(a=>sec.append(renderItem(a,n))); frag.append(sec); }
+  if(!acts.length){ root.replaceChildren(el("div",{class:"card"}, el("h3",{text:"The flight plan is empty"}), el("p",{text:"The board owner loads action points from class notes. Check back after the next class."}))); return; }
+  const sl=sessionList(), so={}; sl.forEach((x,i)=>so[x.id]=i);
+  const latestId=(sl.filter(x=>acts.some(a=>a.s===x.id)).slice(-1)[0]||{}).id;
+  const pass=a=>{ const d=dueInfo(a); return (trackF==="all"||actTrack(a)===trackF)&&(scope!=="core"||a.core)&&(scope!=="open"||st(a.id)!==2)&&(scope!=="due"||(st(a.id)!==2&&d&&(d.cls==="over"||d.cls==="soon")))&&(!roleF||(a.who||[]).includes(roleF))&&(!q||(a.t+" "+a.d+" "+(a.tip||"")).toLowerCase().includes(q)); };
+  const byClass=(x,y)=>{ const d=(so[x.s]??999)-(so[y.s]??999); return (planOrder==="new"?-d:d)||((x.order??0)-(y.order??0)); };
+  if(groupBy==="class"){
+    (planOrder==="new"?sl.slice().reverse():sl).forEach(sx=>{
+      const all=acts.filter(a=>a.s===sx.id); if(!all.length) return;
+      const list=all.filter(pass); if(!list.length) return;
+      frag.append(planGroup({kind:"class",s:sx,all,list,n,latest:sx.id===latestId}));
+    });
+    const orphan=acts.filter(a=>!sessions[a.s]).filter(pass); if(orphan.length) frag.append(planGroup({kind:"other",all:orphan,list:orphan,n}));
+  } else {
+    (groupBy==="batch"?Object.keys(BATCHES):ROLE_ORDER).forEach(k=>{
+      const all=acts.filter(a=>groupBy==="batch"?batchOf(a)===k:((a.who||[])[0]||"OWN")===k); if(!all.length) return;
+      const list=all.filter(pass).sort(byClass); if(!list.length) return;
+      frag.append(planGroup({kind:groupBy,k,all,list,n}));
+    });
+  }
   if(!frag.childNodes.length) frag.append(el("p",{class:"lvl-sub",style:"padding:24px 0",text:"Nothing matches this filter."}));
   root.replaceChildren(frag);
 }
+function planGroup(o){
+  const dn=o.all.filter(a=>st(a.id)===2).length; let meta="", title="", theme="", chips=[], sub=null;
+  if(o.kind==="class"){ const s=o.s, tr=trackOf(s), b=buildsOn(s);
+    meta=(s.tag||"")+" · "+(parseDate(s.date)?fmtDate(parseDate(s.date)):""); title=s.name||"Class"; theme=s.theme||"";
+    chips=[trackChip(tr), o.latest?el("span",{class:"chip new",text:"Latest"}):null]; if(b) sub="Builds on "+b; }
+  else if(o.kind==="batch"){ meta="Batch"; title=BATCHES[o.k].label; theme=BATCHES[o.k].hint; }
+  else if(o.kind==="role"){ meta="Lead role"; title=roleName(o.k); theme=ROLES[o.k]?ROLES[o.k].job:""; }
+  else { title="Other actions"; }
+  const copyBtn=el("button",{class:"btn small",text:"Copy open items",onclick:()=>copyText(groupText(title,o.all))});
+  const sec=el("section",{class:"session"}, el("div",{class:"s-head"},
+    el("div",null, el("div",{class:"s-meta",text:meta}), el("h2",null,title,...chips.filter(Boolean).map(c=>{ c.style.marginLeft="10px"; c.style.verticalAlign="middle"; return c; })), sub?el("div",{class:"s-sub",text:sub}):null),
+    el("div",{class:"s-tools"}, el("div",null, el("div",{class:"s-prog",text:dn+" / "+o.all.length+" done"}), el("div",{class:"s-bar"},el("i",{style:"width:"+Math.round(dn/o.all.length*100)+"%"}))), copyBtn),
+    el("div",{class:"s-theme",text:theme})));
+  o.list.forEach(a=>sec.append(renderItem(a,o.n,o.kind)));
+  return sec;
+}
+function groupText(title,all){
+  const openOnes=all.filter(a=>st(a.id)!==2);
+  const lines=["*"+title+"* · "+openOnes.length+" open"+(openOnes.length===1?" item":" items"),""];
+  openOnes.forEach(a=>{ const s=sessions[a.s]; const d=dueInfo(a); lines.push("☐ "+a.t+" ("+[(s&&s.tag)||"",roleName((a.who||["OWN"])[0]),d?d.text:""].filter(Boolean).join(", ")+")"); });
+  if(!openOnes.length) lines.push("All done here.");
+  lines.push("","From the BMP Flight Log: "+SITE_URL);
+  return lines.join("\n");
+}
 function roleName(r){ const c=P.crew[r]; return (ROLES[r]?ROLES[r].label:r)+(c&&c.name?" · "+c.name:""); }
-function renderItem(a,n){
+function renderItem(a,n,view){
   const s=st(a.id), d=dueInfo(a), isOpen=open.has(a.id);
   const btn=el("button",{class:"stbtn","data-s":String(s),"aria-label":a.t+": "+["not started","in progress","done"][s]+". Click to change.",title:["Not started","In progress","Done"][s]+" · click to change",onclick:(e)=>cycle(a,e)});
   const sub=el("div",{class:"sub"}, (a.who||[]).map((r,i)=>el("span",{class:"who"+(i===0?" lead":""),text:roleName(r)})),
-    d&&s!==2?el("span",{class:"chip "+d.cls,text:d.text}):null, isNew(a)?el("span",{class:"chip new",text:"New"}):null);
+    d&&s!==2?el("span",{class:"chip "+d.cls,text:d.text}):null, isNew(a)?el("span",{class:"chip new",text:"New"}):null,
+    view&&view!=="class"&&view!=="other"? [el("span",{class:"chip bat",text:(sessions[a.s]||{}).tag||""}), actTrack(a)!=="main"?trackChip(actTrack(a)):null] : el("span",{class:"chip bat",title:BATCHES[batchOf(a)].hint,text:BATCHES[batchOf(a)].label}));
   const row=el("div",{class:"row"}, btn,
     el("div",null, el("button",{class:"ttl","aria-expanded":String(isOpen),text:a.t,onclick:()=>{ isOpen?open.delete(a.id):open.add(a.id); renderPlan(); }}), sub),
-    el("div",{class:"meta"}, a.core?el("span",{class:"chip core",text:"80/20"}):null, el("span",{class:"pts",text:(a.pts||1)+" pt"})));
+    el("div",{class:"meta"}, a.core?el("span",{class:"chip core",text:"80/20"}):null, el("span",{class:"pts",title:actWeight(a)<1?"Revision class: counts at 70%":"",text:ptsLabel(a)})));
   const wrap=el("div",{class:"item"+(s===2?" done":""),"data-item":a.id}, row);
   if(isOpen){
     const by=doneBy(a.id);
@@ -896,6 +1031,10 @@ async function coachMe(a,out,btn){
 
 // ---------------- library
 function renderLib(){
+  document.querySelectorAll("#lib-mode button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===libMode)));
+  $("sci").hidden=libMode!=="sci"; $("libtopics").hidden=libMode==="sci";
+  $("lib-q").placeholder=libMode==="sci"?"Search sciences":"Search topics: EM, 4AS, TAM…";
+  if(libMode==="sci"){ renderSciences(); return; }
   const q=libQ.toLowerCase();
   const list=topicList().filter(t=>!q||(t.title+" "+(t.keywords||[]).join(" ")+" "+t.body).toLowerCase().includes(q));
   if(!libSel && list.length) libSel=list[0].id;
@@ -909,6 +1048,15 @@ function renderLib(){
     if(acts.length) kids.push(el("div",{class:"eyebrow",style:"margin-top:12px",text:"Actions that use this"}), el("div",{class:"btnrow",style:"margin-top:6px"}, acts.map(a=>el("button",{class:"btn small",text:(st(a.id)===2?"✓ ":"")+a.t,onclick:()=>jump(a.id)}))));
   } else kids.push(el("h2",{text:"Pick a topic"}));
   box.replaceChildren(...kids);
+}
+function renderSciences(){
+  const q=libQ.toLowerCase();
+  const box=$("sci");
+  const search=el("input",{class:"field",placeholder:"Search sciences",value:libQ,style:"width:100%;margin-bottom:12px","aria-label":"Search sciences"}); search.value=libQ;
+  search.addEventListener("input",e=>{ libQ=e.target.value; const pos=e.target.selectionStart; renderSciences(); const n=$("sci").querySelector("input"); n.focus(); n.setSelectionRange(pos,pos); });
+  const groups=Object.keys(BATCHES).map(k=>({k,list:SCIENCES.filter(x=>x.b===k&&(!q||x.t.toLowerCase().includes(q)))})).filter(g=>g.list.length);
+  box.replaceChildren(search, el("div",{class:"sci-grid"}, ...groups.map(g=>el("section",null, el("h3",{text:BATCHES[g.k].label}), el("div",{class:"sci-list"}, ...g.list.map(x=>el("div",{class:"sci"}, el("p",{text:x.t}), el("small",{text:"Week "+x.wk}))))))),
+    el("p",{class:"lvl-sub",style:"margin-top:14px;font-size:12.5px",text:"The principles Rahul Sir repeats in class. Several come from a batchmate's Course Execution Checklist. Sciences aren't ticked; they're for re-reading."}));
 }
 async function askCoach(q,t,chatBox){
   chatBusy=true; chat.push({role:"user",content:q});
@@ -939,6 +1087,15 @@ function renderWeek(){
   }}, el("span",{class:"box",text:h[x.id]?"✓":""}), el("span",null,x.t,el("small",{text:x.n})))));
   const bar=[]; for(let o=-11;o<=0;o++){ const k=isoWeek(weekDate(o)), p=weekPctOf(P.habits,k); bar.push(el("i",{class:p>=70?"hit":"",title:weekRange(weekDate(o))+": "+p+"%",text:k.slice(-2)})); }
   $("streakbar").replaceChildren(...bar);
+  const mk=d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); P.monthly=P.monthly||{}; const m=P.monthly[mk]||{};
+  const mdone=MONTHLY.filter(x=>m[x.id]).length;
+  $("mo-label").textContent="This month · "+d.toLocaleDateString("en-IN",{month:"long",year:"numeric"}); $("mo-score").textContent=mdone+" of "+MONTHLY.length+" done";
+  $("monthly").replaceChildren(...MONTHLY.map(x=>el("button",{class:"habit","aria-pressed":String(!!m[x.id]),onclick:(e)=>{
+    P.monthly[mk]=Object.assign({},P.monthly[mk]); if(P.monthly[mk][x.id]) delete P.monthly[mk][x.id]; else { P.monthly[mk][x.id]=1; const r=e.currentTarget.getBoundingClientRect(); burst(r.left+20,r.top+20,18); }
+    if(!Object.keys(P.monthly[mk]).length) delete P.monthly[mk];
+    if(MONTHLY.every(y=>(P.monthly[mk]||{})[y.id])) toast("Month closed in full",true);
+    save(); renderWeek();
+  }}, el("span",{class:"box",text:m[x.id]?"✓":""}), el("span",null,x.t,el("small",{text:x.n})))));
 }
 
 // ---------------- board
@@ -1199,6 +1356,9 @@ $("qa-post").addEventListener("click",async()=>{ const t=$("qa-text").value.trim
   const b=$("qa-post"); b.disabled=true; if(await qaAct("ask",{body:t,classId:$("qa-class").value},"Question posted to the batch.")){ $("qa-text").value=""; qaF="all"; renderQA(); } b.disabled=false; });
 document.querySelectorAll("#qa-f button").forEach(b=>b.addEventListener("click",()=>{ qaF=b.dataset.v; renderQA(); }));
 $("qa-q").addEventListener("input",e=>{ qaQ=e.target.value; renderQA(); });
+document.querySelectorAll("#f-track button").forEach(b=>b.addEventListener("click",()=>{ trackF=b.dataset.v; saveUi(); renderPlan(); }));
+$("f-group").addEventListener("change",e=>{ groupBy=e.target.value; saveUi(); renderPlan(); });
+document.querySelectorAll("#lib-mode button").forEach(b=>b.addEventListener("click",()=>{ libMode=b.dataset.v; saveUi(); renderLib(); }));
 $("f-order").addEventListener("click",()=>{ planOrder=planOrder==="new"?"old":"new"; saveUi(); renderPlan(); });
 window.addEventListener("hashchange",qaFromHash);
 function renderAll(){ renderHeader(); renderTicker(); qaCount(); renderTab(); }
