@@ -122,6 +122,27 @@ textarea.field{width:100%;resize:vertical}
 .newbanner .btn{background:#fff;color:#0f2a40;border-color:#fff}
 
 /* chips */
+.tabcount{display:inline-block;margin-left:6px;min-width:20px;padding:1px 6px;border-radius:99px;background:var(--amber);color:#111;font-family:var(--f-mono);font-size:11px;font-weight:600;vertical-align:middle;line-height:16px;text-align:center}
+.qa-wrap{display:grid;gap:12px}
+.qa-ask textarea{margin:8px 0}
+.qa-row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.qa-row select{flex:1 1 200px}
+.btn.primary{background:var(--amber);border-color:var(--amber);color:#111}
+.qa{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:14px 16px;min-width:0}
+.qa.hl{border-color:var(--amber);box-shadow:0 0 0 3px color-mix(in srgb,var(--amber) 25%,transparent)}
+.qa-meta{display:flex;flex-wrap:wrap;gap:6px 10px;align-items:center;color:var(--muted);font-size:12.5px}
+.qa-meta b{color:var(--ink)}
+.qa-body{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0 10px;font-size:15.5px;line-height:1.5}
+.qa-q .qa-body{font-weight:600}
+.qa-tools{display:flex;flex-wrap:wrap;gap:6px}
+.qa-ans{margin-top:12px;border-top:1px solid var(--line);padding-top:10px;display:grid;gap:10px}
+.qa-a{padding-left:12px;border-left:3px solid var(--line)}
+.qa-a.top{border-left-color:var(--good)}
+.qa-a .qa-body{font-size:14.5px;margin:4px 0 6px}
+.qa-reply{display:flex;gap:8px;align-items:flex-end;margin-top:10px}
+.qa-reply textarea{flex:1}
+.like[aria-pressed="true"]{border-color:var(--good);color:var(--good)}
+@media (max-width:560px){.qa-reply{flex-direction:column;align-items:stretch}}
 .chip{display:inline-flex;align-items:center;gap:4px;font-family:var(--f-mono);font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;border-radius:5px;padding:2px 7px;white-space:nowrap}
 .chip.over{background:var(--bad-soft);color:var(--bad)}
 .chip.soon{background:var(--amber-soft);color:var(--warn);animation:pulse 1.8s ease-in-out infinite}
@@ -372,6 +393,7 @@ a.btn{text-decoration:none;color:inherit;display:inline-block}
     <button class="tab" role="tab" data-tab="board">Departures</button>
     <button class="tab" role="tab" data-tab="lib">Library</button>
     <button class="tab" role="tab" data-tab="shelf">Reading room</button>
+    <button class="tab" role="tab" data-tab="qa">Q&amp;A<span class="tabcount" id="qa-count" hidden></span></button>
     <button class="tab" role="tab" data-tab="crew">Crew</button>
   </nav>
 
@@ -392,6 +414,7 @@ a.btn{text-decoration:none;color:inherit;display:inline-block}
       </div>
       <select class="field" id="f-role" aria-label="Filter by role"><option value="">Everyone's actions</option></select>
       <input class="field" id="f-q" placeholder="Search actions" aria-label="Search actions" style="flex:1 1 160px">
+      <button class="btn small" id="f-order" title="Rahul Sir: start from the latest week">Newest class first</button>
       <button class="btn small" id="expandall">Expand all</button>
     </div>
     <div id="plan"></div>
@@ -434,6 +457,24 @@ a.btn{text-decoration:none;color:inherit;display:inline-block}
   </section>
 
   <section id="p-shelf" class="deck" hidden><div id="shelf"></div></section>
+
+  <section id="p-qa" class="deck" hidden>
+    <div class="qa-wrap">
+      <div class="card qa-ask">
+        <div class="eyebrow">Ask the batch</div>
+        <textarea class="field" id="qa-text" rows="3" maxlength="2000" placeholder="Stuck on something? e.g. How are you tracking WIP between production stages in the IMS?"></textarea>
+        <div class="qa-row">
+          <select class="field" id="qa-class" aria-label="Which class is this about?"><option value="">General question</option></select>
+          <button class="btn primary" id="qa-post">Post question</button>
+        </div>
+      </div>
+      <div class="filters">
+        <div class="seg" id="qa-f"><button data-v="all">All</button><button data-v="open">Unanswered</button><button data-v="mine">Mine</button></div>
+        <input class="field" id="qa-q" placeholder="Search questions and answers" aria-label="Search questions" style="flex:1 1 160px">
+      </div>
+      <div id="qa-list"></div>
+    </div>
+  </section>
 
   <section id="p-crew" class="deck" hidden>
     <p style="margin-top:0;max-width:70ch;color:var(--muted)">Name the people in each seat. Their names appear on your actions, and "Copy task list" gives you a ready list for Wednesday Delegation.</p>
@@ -512,13 +553,14 @@ const LS = "bmp-flightlog-v2";
 let sessions={}, actions={}, topics={}, resources={}, players=[]; let shelfF="all";
 let P = blankP();
 let db=null, user=null, sample=null, uid=null, isOwner=false, canEdit=false, writable=true, profiles={};
+let planOrder="new", qa=[], qaF="all", qaQ="", qaFocus=null, qaDraft={};
 let tab="home", scope="all", roleF="", query="", open=new Set(), weekOffset=0, libSel=null, libQ="";
 const coachOut = {}; let chat=[]; let chatBusy=false;
 function blankP(){ return {items:{},notes:{},habits:{},crew:{},playbook:{},shelf:{},callsign:"",company:"",recent:[],lastSeen:""}; }
 function lsGet(k){ try{return localStorage.getItem(k);}catch(e){return null;} }
 function lsSet(k,v){ try{localStorage.setItem(k,v);}catch(e){} }
 try{ const c=JSON.parse(lsGet(LS)||"null"); if(c&&c.items) P=Object.assign(blankP(),c); }catch(e){}
-try{ const u=JSON.parse(lsGet(LS+"-ui")||"null"); if(u){ tab=u.tab||"home"; scope=u.scope||"all"; roleF=u.roleF||""; } }catch(e){}
+try{ const u=JSON.parse(lsGet(LS+"-ui")||"null"); if(u){ tab=u.tab||"home"; scope=u.scope||"all"; roleF=u.roleF||""; planOrder=u.planOrder||"new"; } }catch(e){}
 
 // ---------------- helpers
 const _rc=Element.prototype.replaceChildren; Element.prototype.replaceChildren=function(...k){ return _rc.apply(this,k.filter(x=>x!=null&&x!==false)); };
@@ -627,7 +669,7 @@ async function push(){
   try{ await api("save",{state:P,summary}); setSync("Saved"); }
   catch(e){ setSync("Not saved"); if(!isAuthErr(e)) toast("Couldn't save just now. Your change is kept on this device and will retry."); }
 }
-function saveUi(){ lsSet(LS+"-ui",JSON.stringify({tab,scope,roleF})); }
+function saveUi(){ lsSet(LS+"-ui",JSON.stringify({tab,scope,roleF,planOrder})); }
 
 // ---------------- confetti
 const fx=$("fx"), ctx=fx.getContext("2d"); let parts=[], raf=null;
@@ -709,6 +751,7 @@ function renderTicker(){
   const items=ev.slice(0,14).map(e=>el("span",null,"✈ ",el("b",{text:e.who})," cleared “"+e.t+"” · "+ago(e.at)));
   const avg=rows.length?Math.round(rows.reduce((a,r)=>a+r.power,0)/rows.length):0;
   if(rows.length) items.unshift(el("span",null,"BATCH ALTITUDE ",el("b",{text:String(avg)})," · "+rows.length+" PILOTS ON BOARD"));
+  const lq=qaQuestions()[0]; if(lq) items.splice(1,0,el("span",null,"❓ ",el("b",{text:lq.name||"A pilot"})," asked “"+(lq.body.length>70?lq.body.slice(0,70)+"…":lq.body)+"” · "+ago(lq.at)));
   const nc=nextClass(); items.push(el("span",null,"NEXT CLASS ",el("b",{text:fmtDate(nc)+" 9:30 AM"})));
   const due=actionList().filter(a=>{ const d=dueInfo(a); return d&&d.cls==="soon"&&st(a.id)!==2; }).length;
   if(due) items.push(el("span",null,el("b",{text:String(due)})," ACTIONS DUE THIS WEEK FOR YOU"));
@@ -770,14 +813,16 @@ function renderPlan(){
   const root=$("plan"), frag=document.createDocumentFragment(), q=query.toLowerCase(), n=playerRows().length;
   const acts=actionList();
   if(!acts.length){ root.replaceChildren(el("div",{class:"card"}, el("h3",{text:"The flight plan is empty"}), el("p",{text: canEdit ? "Add your first class notes and the action points will appear here, grouped by class." : "The board owner loads action points from class notes. Check back after the next class."}), canEdit?el("button",{class:"btn primary",text:"＋ Add class notes",onclick:openSheet}):null)); return; }
-  sessionList().forEach(s=>{
+  const sl=sessionList(), latestId=(sl.filter(x=>acts.some(a=>a.s===x.id)).slice(-1)[0]||{}).id;
+  $("f-order").textContent=planOrder==="new"?"Newest class first":"Oldest class first";
+  (planOrder==="new"?sl.slice().reverse():sl).forEach(s=>{
     const all=acts.filter(a=>a.s===s.id); if(!all.length) return;
     const list=all.filter(a=>{ const d=dueInfo(a);
       return (scope!=="core"||a.core)&&(scope!=="open"||st(a.id)!==2)&&(scope!=="due"||(st(a.id)!==2&&d&&(d.cls==="over"||d.cls==="soon")))&&(!roleF||(a.who||[]).includes(roleF))&&(!q||(a.t+" "+a.d+" "+(a.tip||"")).toLowerCase().includes(q)); });
     if(!list.length) return;
     const dn=all.filter(a=>st(a.id)===2).length;
     const sec=el("section",{class:"session"}, el("div",{class:"s-head"},
-      el("div",null, el("div",{class:"s-meta",text:(s.tag||"")+" · "+(parseDate(s.date)?fmtDate(parseDate(s.date)):"")}), el("h2",{text:s.name||"Class"})),
+      el("div",null, el("div",{class:"s-meta",text:(s.tag||"")+" · "+(parseDate(s.date)?fmtDate(parseDate(s.date)):"")}), el("h2",null,s.name||"Class",s.id===latestId?el("span",{class:"chip new",style:"margin-left:10px;vertical-align:middle",text:"Latest"}):null)),
       el("div",null, el("div",{class:"s-prog",text:dn+" / "+all.length+" done"}), el("div",{class:"s-bar"},el("i",{style:"width:"+Math.round(dn/all.length*100)+"%"}))),
       el("div",{class:"s-theme",text:s.theme||""})));
     list.forEach(a=>sec.append(renderItem(a,n)));
@@ -1073,8 +1118,8 @@ async function publishX(){
   const w=X.week; const clean=Object.assign({},w,{actions:w.actions.filter(x=>x.include),topics:w.topics.filter(x=>x.include),resources:w.resources.filter(x=>x.include)});
   try{
     const r=await api("import",{week:clean}); await reloadContent();
-    X=null; closeSheet(); const n=r.imported; toast(n.actions+" actions, "+n.topics+" topics and "+n.resources+" books/films are live",true); burst(innerWidth/2,innerHeight/3,160); showTab("plan");
-  }catch(e){ btn.disabled=false; btn.textContent="Publish to the batch"; toast(e.code==="auth:admin_only"?"Only admins can import.":e.code&&e.code.startsWith("class_exists")?"That class id already exists.":"Import failed. Nothing was half-written if the error came before saving; check the Sheet."); }
+    X=null; closeSheet(); const n=r.imported||{actions:clean.actions.length,topics:clean.topics.length,resources:clean.resources.length}; toast(n.actions+" actions, "+n.topics+" topics and "+n.resources+" books/films are live",true); burst(innerWidth/2,innerHeight/3,160); showTab("plan");
+  }catch(e){ btn.disabled=false; btn.textContent="Publish to the batch"; toast(e.code==="unsure"?"Google didn't confirm. Reload in a minute and check Flight plan before importing again.":e.code==="auth:admin_only"?"Only admins can import.":e.code&&e.code.startsWith("class_exists")?"That class id already exists.":"Import failed. Nothing was half-written if the error came before saving; check the Sheet."); }
 }
 
 // ---------------- share & controls
@@ -1089,11 +1134,74 @@ $("share").addEventListener("click",()=>{
 function showTab(t){
   tab=t; saveUi();
   document.querySelectorAll(".tab").forEach(b=>b.setAttribute("aria-selected",String(b.dataset.tab===t)));
-  ["home","plan","week","board","lib","shelf","crew"].forEach(x=>{ const p=$("p-"+x); const was=p.hidden; p.hidden=x!==t; if(!p.hidden&&was){ p.classList.remove("deck"); void p.offsetWidth; p.classList.add("deck"); } });
+  ["home","plan","week","board","lib","shelf","qa","crew"].forEach(x=>{ const p=$("p-"+x); const was=p.hidden; p.hidden=x!==t; if(!p.hidden&&was){ p.classList.remove("deck"); void p.offsetWidth; p.classList.add("deck"); } });
   renderTab();
 }
-function renderTab(){ if(tab==="home") renderHome(); if(tab==="plan") renderPlan(); if(tab==="week") renderWeek(); if(tab==="board") renderBoard(); if(tab==="lib") renderLib(); if(tab==="crew") renderCrew(); if(tab==="shelf") renderShelf(); }
-function renderAll(){ renderHeader(); renderTicker(); renderTab(); }
+function renderTab(){ if(tab==="home") renderHome(); if(tab==="plan") renderPlan(); if(tab==="week") renderWeek(); if(tab==="board") renderBoard(); if(tab==="lib") renderLib(); if(tab==="crew") renderCrew(); if(tab==="shelf") renderShelf(); if(tab==="qa") renderQA(); }
+
+// ---------------- Q&A
+const SITE_URL=location.origin+location.pathname;
+function qaQuestions(){ return qa.filter(x=>!x.parent).sort((a,b)=>String(b.at).localeCompare(String(a.at))); }
+function qaAnswers(id){ return qa.filter(x=>x.parent===id).sort((a,b)=>(b.likes-a.likes)||String(a.at).localeCompare(String(b.at))); }
+function qaWho(x){ return (x.name||"A pilot")+(x.company?" ("+x.company+")":""); }
+function qaCount(){ const n=qaQuestions().filter(q=>!qaAnswers(q.id).length).length; const c=$("qa-count"); if(!c) return; c.hidden=!n; c.textContent=String(n); c.title=n+" unanswered"; }
+function qaText(q){
+  const s=sessions[q.s]; const ans=qaAnswers(q.id);
+  const lines=["*BMP Q&A"+(s?" · "+(s.tag||s.name):"")+"*","","❓ *"+qaWho(q)+" asks:*",q.body,""];
+  if(ans.length) ans.forEach(a=>lines.push("💬 *"+qaWho(a)+":* "+a.body+(a.likes?" ("+a.likes+" found this helpful)":""),""));
+  else lines.push("No answers yet. Can you help?","");
+  lines.push("Answer on the Flight Log 👉 "+SITE_URL+"#qa="+q.id);
+  return lines.join("\n");
+}
+async function qaAct(action,payload,okMsg){
+  try{ const j=await api(action,payload); if(j.qa) qa=j.qa; else { const r=await api("qa"); qa=r.qa||[]; }
+    if(okMsg) toast(okMsg); qaCount(); renderTicker(); renderQA(); return true; }
+  catch(e){ toast(e.detail==="not_yours"||e.code==="not_yours"?"You can only delete your own posts.":"Couldn't reach the server. Try again in a moment."); return false; }
+}
+function qaFromHash(){ const m=/^#qa(?:=([\w-]+))?/.exec(location.hash||""); if(!m) return; qaFocus=m[1]||null; showTab("qa"); }
+function renderQA(){
+  const sel=$("qa-class"); const cur=sel.value;
+  sel.replaceChildren(el("option",{value:"",text:"General question"}), ...sessionList().slice().reverse().map(s=>el("option",{value:s.id,text:(s.tag?s.tag+" · ":"")+(s.name||"")})));
+  sel.value=cur;
+  document.querySelectorAll("#qa-f button").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.v===qaF)));
+  const q=qaQ.toLowerCase();
+  let list=qaQuestions();
+  if(qaF==="open") list=list.filter(x=>!qaAnswers(x.id).length);
+  if(qaF==="mine") list=list.filter(x=>x.author===uid||qaAnswers(x.id).some(a=>a.author===uid));
+  if(q) list=list.filter(x=>(x.body+" "+x.name+" "+qaAnswers(x.id).map(a=>a.body).join(" ")).toLowerCase().includes(q));
+  const root=$("qa-list");
+  if(!list.length){ root.replaceChildren(el("div",{class:"card"},el("p",{style:"margin:0;color:var(--muted)",text: qa.length?"Nothing matches this filter.":"No questions yet. Ask the first one: someone in the batch has probably solved it already."}))); return; }
+  root.replaceChildren(...list.map(renderQItem));
+  if(qaFocus){ const n=document.querySelector('[data-qa="'+qaFocus+'"]'); if(n){ n.classList.add("hl"); n.scrollIntoView({behavior:"smooth",block:"center"}); } qaFocus=null; }
+}
+function qaLikeBtn(x){ return el("button",{class:"btn small like","aria-pressed":String(!!x.liked),title:"Mark as helpful",text:"▲ Helpful"+(x.likes?" · "+x.likes:""),onclick:()=>qaAct("like",{id:x.id})}); }
+function qaDelBtn(x,what){ return (x.author===uid||canEdit)?el("button",{class:"btn small ghost",text:"Delete",onclick:()=>{ if(qaArm===x.id){ qaArm=null; qaAct("qadel",{id:x.id},what+" deleted."); } else { qaArm=x.id; toast("Tap Delete again to confirm."); setTimeout(()=>{ if(qaArm===x.id) qaArm=null; },4000); } }}):null; }
+let qaArm=null;
+function renderQItem(x){
+  const s=sessions[x.s], ans=qaAnswers(x.id);
+  const meta=el("div",{class:"qa-meta"}, el("b",{text:x.name||"A pilot"}), x.company?el("span",{text:x.company}):null, el("span",{text:ago(x.at)}),
+    s?el("span",{class:"chip",text:s.tag||s.name}):null, ans.length?el("span",{class:"chip done",text:ans.length+(ans.length>1?" answers":" answer")}):el("span",{class:"chip soon",text:"Unanswered"}));
+  const wa=el("a",{class:"btn small",href:"https://wa.me/?text="+encodeURIComponent(qaText(x)),target:"_blank",rel:"noopener",text:"Send on WhatsApp"});
+  const copy=el("button",{class:"btn small",text:"Copy for WhatsApp",onclick:()=>copyText(qaText(x))});
+  const tools=el("div",{class:"qa-tools"}, qaLikeBtn(x), copy, wa, qaDelBtn(x,"Question"));
+  const ta=el("textarea",{class:"field",rows:"2",maxlength:"2000",placeholder:"Share what worked for you…"}); ta.value=qaDraft[x.id]||""; ta.addEventListener("input",()=>qaDraft[x.id]=ta.value);
+  const post=el("button",{class:"btn small primary",text:"Answer",onclick:async()=>{ const t=ta.value.trim(); if(!t){ ta.focus(); return; } post.disabled=true; if(await qaAct("answer",{parentId:x.id,body:t},"Answer posted. Thank you!")) delete qaDraft[x.id]; post.disabled=false; }});
+  const answers=ans.length?el("div",{class:"qa-ans"}, ...ans.map((a,i)=>el("div",{class:"qa-a"+(i===0&&a.likes?" top":"")},
+    el("div",{class:"qa-meta"}, el("b",{text:a.name||"A pilot"}), a.company?el("span",{text:a.company}):null, el("span",{text:ago(a.at)})),
+    el("div",{class:"qa-body",text:a.body}), el("div",{class:"qa-tools"}, qaLikeBtn(a), qaDelBtn(a,"Answer"))))):null;
+  return el("article",{class:"qa qa-q","data-qa":x.id}, meta, el("div",{class:"qa-body",text:x.body}), tools, answers, el("div",{class:"qa-reply"}, ta, post));
+}
+function copyText(text){
+  (async()=>{ try{ await navigator.clipboard.writeText(text); toast("Copied. Paste it in WhatsApp."); }
+    catch(e){ const f=$("copyfallback"); f.hidden=false; f.value=text; f.focus(); f.select(); toast("Select all and copy the text below."); } })();
+}
+$("qa-post").addEventListener("click",async()=>{ const t=$("qa-text").value.trim(); if(!t){ $("qa-text").focus(); return; }
+  const b=$("qa-post"); b.disabled=true; if(await qaAct("ask",{body:t,classId:$("qa-class").value},"Question posted to the batch.")){ $("qa-text").value=""; qaF="all"; renderQA(); } b.disabled=false; });
+document.querySelectorAll("#qa-f button").forEach(b=>b.addEventListener("click",()=>{ qaF=b.dataset.v; renderQA(); }));
+$("qa-q").addEventListener("input",e=>{ qaQ=e.target.value; renderQA(); });
+$("f-order").addEventListener("click",()=>{ planOrder=planOrder==="new"?"old":"new"; saveUi(); renderPlan(); });
+window.addEventListener("hashchange",qaFromHash);
+function renderAll(){ renderHeader(); renderTicker(); qaCount(); renderTab(); }
 document.querySelectorAll(".tab").forEach(b=>b.addEventListener("click",()=>showTab(b.dataset.tab)));
 document.querySelectorAll("#f-scope button").forEach(b=>b.addEventListener("click",()=>{ scope=b.dataset.v; saveUi(); renderPlan(); }));
 ROLE_ORDER.forEach(r=>$("f-role").append(el("option",{value:r,text:"Only: "+ROLES[r].label})));
@@ -1118,12 +1226,44 @@ let idToken=null, meInfo=null, clientId="", retryAfterLogin=null;
 const TK="bmp-flightlog-token";
 function isAuthErr(e){ return e&&e.code&&String(e.code).startsWith("auth:"); }
 function jwtExp(t){ try{ return JSON.parse(atob(t.split(".")[1].replace(/-/g,"+").replace(/_/g,"/"))).exp*1000; }catch(e){ return 0; } }
+let transport=lsGet("bmp-transport")||"fetch";
+function netErr(){ const er=new Error("network"); er.code="network"; return er; }
+function useJsonp(){ transport="jsonp"; lsSet("bmp-transport","jsonp"); }
+async function fetchJson(opts,ms){ const ac=new AbortController(); const to=setTimeout(()=>ac.abort(),ms);
+  try{ const r=await fetch(API_URL,Object.assign({signal:ac.signal,cache:"no-store"},opts||{})); return await r.json(); } finally{ clearTimeout(to); } }
+function jsonp(params){
+  return new Promise((res,rej)=>{
+    const cb="__fl"+Math.random().toString(36).slice(2,10), s=document.createElement("script");
+    const done=()=>{ clearTimeout(to); try{ delete window[cb]; }catch(e){} s.remove(); };
+    const to=setTimeout(()=>{ done(); rej(netErr()); },30000);
+    window[cb]=j=>{ done(); res(j); };
+    s.onerror=()=>{ done(); rej(netErr()); };
+    s.src=API_URL+"?"+new URLSearchParams(Object.assign({cb},params)).toString();
+    document.head.append(s);
+  });
+}
 async function api(action,payload){
   if(!idToken||jwtExp(idToken)<Date.now()+60000){ await needLogin("Your sign-in expired. Sign in again to keep saving."); }
-  let res;
-  try{ res=await fetch(API_URL,{method:"POST",body:JSON.stringify(Object.assign({action,idToken},payload||{}))}); }
-  catch(e){ const er=new Error("network"); er.code="network"; throw er; }
-  const j=await res.json();
+  const body=JSON.stringify(Object.assign({action,idToken},payload||{}));
+  const READ=action==="bootstrap"||action==="content"||action==="board"||action==="qa";
+  let j=null;
+  if(transport==="fetch"){
+    const tries=READ||action==="save"?2:1;
+    for(let i=0;i<tries&&!j;i++){ try{ j=await fetchJson({method:"POST",body},15000); }catch(e){} }
+    if(!j){
+      if(!READ&&action!=="save"){ const er=new Error("unsure"); er.code="unsure"; throw er; }  // a write may already have landed: never resend
+      useJsonp();
+    }
+  }
+  if(!j){
+    if(READ){ try{ j=await jsonp({action,t:idToken}); }catch(e){ j=await jsonp({action,t:idToken}); } }
+    else {
+      try{ await Promise.race([fetch(API_URL,{method:"POST",body,mode:"no-cors",keepalive:body.length<60000}),new Promise(r=>setTimeout(r,4000))]); }
+      catch(e){ throw netErr(); }
+      if(action!=="save") await new Promise(r=>setTimeout(r,3500));   // give the Sheet a moment before re-reading
+      j={ok:true,blind:true};
+    }
+  }
   if(!j.ok){ const er=new Error(j.error); er.code=j.error; er.email=j.email; er.detail=j.detail;
     if(isAuthErr(er)&&er.code!=="auth:admin_only"){ try{ sessionStorage.removeItem(TK);}catch(x){} idToken=null; }
     throw er; }
@@ -1149,7 +1289,7 @@ function applyContent(c){
   _al=null; _base=null;
 }
 async function reloadContent(){ const j=await api("content"); applyContent(j.content); renderAll(); }
-async function pollBoard(){ if(document.visibilityState!=="visible"||!idToken) return; try{ const j=await api("board"); players=(j.board||[]).map(b=>({id:b.id,data:b})); soon(); }catch(e){} }
+async function pollBoard(){ if(document.visibilityState!=="visible"||!idToken) return; try{ const j=await api("board"); players=(j.board||[]).map(b=>({id:b.id,data:b})); if(j.qa) qa=j.qa; soon(); }catch(e){} }
 let renderQ=null; function soon(){ clearTimeout(renderQ); renderQ=setTimeout(renderAll,80); }
 
 async function start(){
@@ -1159,7 +1299,8 @@ async function start(){
   catch(e){
     if(e.code==="not_allowed"){ gate("Your Google account "+(e.email||"")+" isn't on this batch's list yet. Ask the admin to add it, then reload.",false); $("gate-out").hidden=false; return; }
     if(e.code==="network"){ gate("Couldn't reach the server. Check your connection and reload.",false); return; }
-    gate("Sign-in didn't work ("+e.code+"). Try again.",true); return;
+    if(e.code==="google_busy"){ gate("Google's server didn't answer properly. Wait a few seconds and reload the page.",true); return; }
+    gate("Sign-in didn't work ("+(e.code||"unknown")+"). Try again.",true); return;
   }
   $("gate").hidden=true;
   meInfo=j.me; uid=j.myId; db={}; canEdit=j.me.role==="admin";
@@ -1169,6 +1310,7 @@ async function start(){
   if(cfg.AUTOPILOT_DEADLINE){ const d=parseDate(cfg.AUTOPILOT_DEADLINE); if(d){ d.setHours(23,59); AUTOPILOT=d; } }
   applyContent(j.content);
   players=(j.board||[]).map(b=>({id:b.id,data:b}));
+  qa=j.qa||[];
   const local=P;
   if(j.progress){ P=Object.assign(blankP(),j.progress); }
   else { P=Object.assign(blankP(),local); if(!P.callsign) P.callsign=(j.me.name||"").split(" ")[0]; if(!P.company) P.company=j.me.company||""; }
@@ -1180,6 +1322,7 @@ async function start(){
   setMode(); renderAll();
   setInterval(pollBoard,45000);
   setInterval(()=>{ if(document.visibilityState==="visible") reloadContent().catch(()=>{}); },600000);
+  qaFromHash();
   setTimeout(()=>{ booted=true; },2500);
 }
 
@@ -1192,7 +1335,10 @@ $("gate-out").addEventListener("click",signOut);
 (async function(){
   if(API_URL.indexOf("http")!==0){ gate("Setup needed: paste the Apps Script web app URL into API_URL at the top of the script.",false); return; }
   gate("Connecting…",false);
-  try{ const r=await fetch(API_URL); const cfg=await r.json(); clientId=cfg.clientId||""; if(cfg.batch) $("batchname").textContent=cfg.batch; }
+  try{ let cfg=null;
+    if(transport==="fetch"){ for(let i=0;i<2&&!cfg;i++){ try{ cfg=await fetchJson(null,12000); }catch(e){} } if(!cfg) useJsonp(); }
+    if(!cfg) cfg=await jsonp({action:"config"});
+    clientId=cfg.clientId||""; if(cfg.batch) $("batchname").textContent=cfg.batch; }
   catch(e){ gate("Couldn't reach the server. Check the web app URL and that it's deployed for 'Anyone'.",false); return; }
   if(!clientId){ gate("Setup needed: add GOOGLE_CLIENT_ID to the Config tab of the Sheet.",false); return; }
   const waitG=()=>new Promise(r=>{ const t=setInterval(()=>{ if(window.google&&google.accounts&&google.accounts.id){ clearInterval(t); r(); } },100); });
